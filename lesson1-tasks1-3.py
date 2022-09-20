@@ -25,7 +25,7 @@ class Ping(Thread):
     def run(self):
         if not self.bad_ip:
             param = '-n' if platform.system().lower() == 'windows' else '-c'
-            process = Popen(['ping', param, '2', str(self.ip)], stdout=PIPE)
+            process = Popen(['ping', param, '2', '-w', '1', str(self.ip)], stdout=PIPE)
             stdout = process.communicate()
             to_return = self.ip
         else:
@@ -40,20 +40,17 @@ class Ping(Thread):
 
 
 def host_ping(ips):
+    threads = []
 
     for ip in ips:
         thread = Ping(ip)
         thread.start()
+        threads.append(thread)
+
+    for thread in threads:
         thread.join()
 
     print(result)
-
-
-def host_ping_task2(ip, i=0):
-
-    thread = Ping(ip, i)
-    thread.start()
-    thread.join()
 
 
 def host_range_ping_tab(func):
@@ -78,8 +75,15 @@ def host_range_ping(ip, ip_range):
         print('введено значение вне диапазона')
         return
 
+    threads = []
+
     for i in range(ip_range):
-        host_ping_task2(ip, i)
+        thread = Ping(ip, i)
+        thread.start()
+        threads.append(thread)
+
+    for thread in threads:
+        thread.join()
 
     # task 2 - print(result)
 
