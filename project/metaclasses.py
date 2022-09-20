@@ -16,7 +16,6 @@ class ServerVerifier(type):
                 pass
             else:
                 for i in inst:
-                    pprint(i)
 
                     if i.opname == 'LOAD_GLOBAL' or i.opname == 'LOAD_METHOD':
                         methods.add(i.argval)
@@ -43,7 +42,6 @@ class ClientVerifier(type):
                 pass
             else:
                 for i in inst:
-                    pprint(i)
 
                     if i.opname == 'LOAD_GLOBAL' or i.opname == 'LOAD_METHOD':
                         methods.add(i.argval)

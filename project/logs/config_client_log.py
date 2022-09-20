@@ -11,16 +11,11 @@ client_formatter = logging.Formatter('%(asctime)s %(levelname)s %(filename)s %(m
 path = os.path.dirname(os.path.abspath(__file__))
 path = os.path.join(path, 'client.log')
 
-# создаём потоки вывода логов
-steam = logging.StreamHandler(sys.stderr)
-steam.setFormatter(client_formatter)
-steam.setLevel(logging.ERROR)
 log_file = logging.FileHandler(path, encoding='utf8')
 log_file.setFormatter(client_formatter)
 
 # создаём регистратор и настраиваем его
 logger = logging.getLogger('client_dist')
-logger.addHandler(steam)
 logger.addHandler(log_file)
 logger.setLevel(LOGGING_LEVEL)
 

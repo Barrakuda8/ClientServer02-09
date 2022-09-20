@@ -11,6 +11,9 @@ from common.variables import *
 from common.utils import *
 from decos import log
 from metaclasses import ServerVerifier
+import threading
+from pprint import pprint
+from server_db import ServerDB
 
 logger = logging.getLogger('server_dist')
 
@@ -27,13 +30,16 @@ class PortDescriptor:
         instance.__dict__[self.name] = value
 
 
-class Server(metaclass=ServerVerifier):
+class Server(threading.Thread, metaclass=ServerVerifier):
 
     port = PortDescriptor()
 
-    def __init__(self, address, port):
+    def __init__(self, address, port, db):
+        super().__init__()
+        self.daemon = True
         self.address = address
         self.port = port
+        self.db = db
 
         self.clients = []
         self.messages = []
@@ -47,6 +53,8 @@ class Server(metaclass=ServerVerifier):
         if ACTION in message and message[ACTION] == PRESENCE and TIME in message and USER in message:
             if message[USER][ACCOUNT_NAME] not in self.names.keys():
                 self.names[message[USER][ACCOUNT_NAME]] = client
+                client_ip, client_port = client.getpeername()
+                self.db.user_login(message[USER][ACCOUNT_NAME], client_ip, client_port)
                 send_message(client, RESPONSE_200)
             else:
                 response = RESPONSE_400
@@ -60,6 +68,7 @@ class Server(metaclass=ServerVerifier):
             self.messages.append(message)
             return
         elif ACTION in message and message[ACTION] == EXIT and ACCOUNT_NAME in message:
+            self.db.user_logout(message[ACCOUNT_NAME])
             self.clients.remove(self.names[ACCOUNT_NAME])
             self.names[ACCOUNT_NAME].close()
             del self.names[ACCOUNT_NAME]
@@ -80,7 +89,7 @@ class Server(metaclass=ServerVerifier):
             logger.error(
                 f'Пользователь {message[RECEIVER]} не зарегистрирован на сервере, отправка сообщения невозможна.')
 
-    def main(self):
+    def run(self):
         logger.info(
             f'Запущен сервер, порт для подключений: {self.port} , '
             f'адрес с которого принимаются подключения: {self.address}. '
@@ -128,6 +137,49 @@ class Server(metaclass=ServerVerifier):
             self.messages.clear()
 
 
+class ServerConsole(threading.Thread):
+
+    port = PortDescriptor()
+
+    def __init__(self, db):
+        super().__init__()
+        self.daemon = True
+        self.db = db
+
+    def run(self):
+        self.print_help()
+        while True:
+            option = input('Введите команду: ')
+            if option == 'users':
+                pprint(self.db.get_users())
+            elif option == 'active':
+                pprint(self.db.get_active_users())
+            elif option.startswith('history '):
+                user = ' '.join(option.split()[1:])
+                try:
+                    pprint(self.db.get_login_history(user))
+                except:
+                    print(f'Пользователя "{user}" не существует.')
+            elif option == 'help':
+                self.print_help()
+            elif option == 'exit':
+                print('До свидания!')
+                logger.info('Завершения работы сервера по команде администратора.')
+                time.sleep(2)
+                exit(0)
+            else:
+                print('Команда не распознана, попробойте снова. help - вывести поддерживаемые команды.')
+
+    @staticmethod
+    def print_help():
+        print('Поддерживаемые команды:')
+        print('users - вывести список всех пользователей.')
+        print('active - вывести список активных пользователей.')
+        print('history [имя пользователя] - вывести историю входов конкретного пользователя.')
+        print('help - вывести подсказки по командам')
+        print('exit - завершение работы сервера')
+
+
 @log
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -142,8 +194,17 @@ def arg_parser():
 
 def main():
     listen_address, listen_port = arg_parser()
-    server = Server(listen_address, listen_port)
-    server.main()
+    db = ServerDB()
+    server = Server(listen_address, listen_port, db)
+    console = ServerConsole(db)
+    server.start()
+    console.start()
+
+    while True:
+        time.sleep(1)
+        if server.is_alive() and console.is_alive():
+            continue
+        break
 
 
 if __name__ == '__main__':
