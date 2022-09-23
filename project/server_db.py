@@ -36,8 +36,26 @@ class ServerDB:
         def __repr__(self):
             return f'<Login: {self.id}-{self.user}-{self.login_time}>'
 
-    def __init__(self):
-        self.engine = create_engine('sqlite:///server_base.db3', echo=False, pool_recycle=7200,
+    class Contact:
+        def __init__(self, user, contact):
+            self.id = None
+            self.user = user
+            self.contact = contact
+
+        def __repr__(self):
+            return f'<Contact: {self.id}-{self.user}-{self.contact}>'
+
+    class MessageHistory:
+        def __init__(self, user):
+            self.user = user
+            self.sent = 0
+            self.received = 0
+
+        def __repr__(self):
+            return f'<MessageHistory: {self.user}-{self.sent}-{self.received}>'
+
+    def __init__(self, path):
+        self.engine = create_engine(f'sqlite:///{path}.db3', echo=False, pool_recycle=7200,
                                     connect_args={'check_same_thread': False})
         self.metadata = MetaData()
 
@@ -63,11 +81,25 @@ class ServerDB:
                                     Column('login_port', String)
                                     )
 
+        contacts_table = Table('contacts', self.metadata,
+                               Column('id', Integer, primary_key=True),
+                               Column('user', ForeignKey('users.id')),
+                               Column('contact', ForeignKey('users.id'))
+                               )
+
+        message_history_table = Table('message_history', self.metadata,
+                                      Column('user', ForeignKey('users.id'), primary_key=True),
+                                      Column('sent', Integer),
+                                      Column('received', Integer)
+                                      )
+
         self.metadata.create_all(self.engine)
 
         mapper(self.User, users_table)
         mapper(self.ActiveUser, active_users_table)
         mapper(self.LoginHistory, login_history_table)
+        mapper(self.Contact, contacts_table)
+        mapper(self.MessageHistory, message_history_table)
 
         self.session = sessionmaker(bind=self.engine)()
         self.session.query(self.ActiveUser).delete()
@@ -84,6 +116,8 @@ class ServerDB:
             user = self.User(name)
             self.session.add(user)
             self.session.commit()
+            self.session.add(self.MessageHistory(user.id))
+            self.session.commit()
 
         self.session.add(self.ActiveUser(user.id, datetime.datetime.now(), ip, port))
         self.session.add(self.LoginHistory(user.id, datetime.datetime.now(), ip, port))
@@ -97,14 +131,45 @@ class ServerDB:
         self.session.commit()
 
     def get_users(self):
-        return self.session.query(self.User).all()
+        return self.session.query(self.User.name, self.User.last_login).all()
 
     def get_active_users(self):
-        return self.session.query(self.ActiveUser).all()
+        return self.session.query(self.User.name, self.ActiveUser.login_ip, self.ActiveUser.login_port, self.ActiveUser.login_time).join(self.User).all()
 
     def get_login_history(self, name):
         return self.session.query(self.LoginHistory).filter_by(user=self.session.query(self.User)
                                                                .filter_by(name=name).first().id).all()
+
+    def get_contacts(self, name):
+        return self.session.query(self.Contact).filter_by(user=self.session.query(self.User)
+                                                          .filter_by(name=name).first().id).all()
+
+    def get_message_history(self, name=None):
+        if not name:
+            return self.session.query(self.User.name, self.MessageHistory.sent, self.MessageHistory.received).join(self.User).all()
+        return self.session.query(self.User.name, self.MessageHistory.sent, self.MessageHistory.received).filter_by(user=self.session.query(self.User)
+                                                                 .filter_by(name=name).first().id).join(self.User).all()
+
+    def add_contact(self, user_name, contact_name):
+        user = self.session.query(self.User).filter_by(name=user_name).first().id
+        contact = self.session.query(self.User).filter_by(name=contact_name).first().id
+        self.session.add(self.Contact(user, contact))
+        self.session.commit()
+
+    def delete_contact(self, user_name, contact_name):
+        user = self.session.query(self.User).filter_by(name=user_name).first().id
+        contact = self.session.query(self.User).filter_by(name=contact_name).first().id
+        self.session.query(self.Contact).filter_by(user=user, contact=contact).delete()
+        self.session.commit()
+
+    def process_message(self, sender_name, receiver_name):
+        sender = self.session.query(self.User).filter_by(name=sender_name).first().id
+        receiver = self.session.query(self.User).filter_by(name=receiver_name).first().id
+
+        self.session.query(self.MessageHistory).filter_by(user=sender).first().sent += 1
+        self.session.query(self.MessageHistory).filter_by(user=receiver).first().received += 1
+
+        self.session.commit()
 
 
 if __name__ == '__main__':
@@ -112,20 +177,40 @@ if __name__ == '__main__':
     test_db.user_login('client_1', '192.168.1.4', 8080)
     test_db.user_login('client_2', '192.168.1.5', 7777)
 
-    print(' ---- test_db.active_users_list() ----')
+    print(' ---- test_db.get_active_users() ----')
     print(test_db.get_active_users())
 
     test_db.user_logout('client_1')
-    print(' ---- test_db.active_users_list() after logout client_1 ----')
+    print(' ---- test_db.get_active_users() after logout client_1 ----')
     print(test_db.get_active_users())
 
     print(' ---- test_db.login_history(client_1) ----')
     print(test_db.get_login_history('client_1'))
 
-    print(' ---- test_db.users_list() ----')
+    print(' ---- test_db.get_users() ----')
     print(test_db.get_users())
 
-    test_db.user_logout('client_1')
+    print(' ---- test_db.get_contacts() of client_1----')
+    print(test_db.get_contacts('client_1'))
+
+    print(' ---- test_db.add_contact() client_2 to client_1----')
+    test_db.add_contact('client_1', 'client_2')
+    print(test_db.get_contacts('client_1'))
+
+    print(' ---- test_db.delete_contact() client_2 of client_1----')
+    test_db.delete_contact('client_1', 'client_2')
+    print(test_db.get_contacts('client_1'))
+
+    print(' ---- test_db.get_message_history() of client_1 and client_2----')
+    print(test_db.get_message_history('client_1'))
+    print(test_db.get_message_history('client_2'))
+
+    print(' ---- test_db.count_message() client_1 to client_2----')
+    test_db.process_message('client_1', 'client_2')
+    print(test_db.get_message_history('client_1'))
+    print(test_db.get_message_history('client_2'))
+
+    test_db.user_logout('client_2')
     test_db.session.query(test_db.User).filter(test_db.User.name.in_(['client_1', 'client_2'])).delete()
 
     print(' ---- test_db.users_list() ----')

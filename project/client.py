@@ -1,3 +1,4 @@
+import datetime
 import sys
 import json
 import socket
@@ -11,45 +12,62 @@ from common.utils import *
 from errors import IncorrectDataRecivedError, ReqFieldMissingError, ServerError
 from decos import log
 from metaclasses import ClientVerifier
+from pprint import pprint
+from client_db import ClientDB
 
 logger = logging.getLogger('client_dist')
+
+db_lock = threading.Lock()
+transport_lock = threading.Lock()
 
 
 class Receiver(threading.Thread, metaclass=ClientVerifier):
 
-    def __init__(self, transport, name):
+    def __init__(self, transport, name, db):
         super().__init__()
         self.daemon = True
         self.transport = transport
         self.name = name
+        self.db = db
 
     def run(self):
         while True:
-            try:
-                message = get_message(self.transport)
-                if ACTION in message and message[ACTION] == MESSAGE and \
-                        SENDER in message and MESSAGE_TEXT in message and RECEIVER in message \
-                        and message[RECEIVER] == self.name:
-                    logger.info(f'Получено сообщение от пользователя {message[SENDER]}:\n{message[MESSAGE_TEXT]}')
-                    print(f'Получено сообщение от пользователя '
-                          f'{message[SENDER]}:\n{message[MESSAGE_TEXT]}')
+            time.sleep(1)
+            with transport_lock:
+                print(1)
+                try:
+                    message = get_message(self.transport)
+                except IncorrectDataRecivedError:
+                    logger.error(f'Не удалось декодировать полученное сообщение')
+                except (OSError, ConnectionError, ConnectionAbortedError,
+                        ConnectionResetError, json.JSONDecodeError):
+                    logger.critical(f'Потеряно соединение с сервером')
+                    break
                 else:
-                    logger.error(f'Получено некорректное сообщение с сервера: {message}')
-            except IncorrectDataRecivedError:
-                logger.error(f'Не удалось декодировать полученное сообщение')
-            except (OSError, ConnectionError, ConnectionAbortedError,
-                    ConnectionResetError, json.JSONDecodeError):
-                logger.critical(f'Потеряно соединение с сервером')
-                break
+                    if ACTION in message and message[ACTION] == MESSAGE and \
+                            SENDER in message and MESSAGE_TEXT in message and RECEIVER in message \
+                            and message[RECEIVER] == self.name:
+                        with db_lock:
+                            try:
+                                self.db.save_message(message[SENDER], self.name, message[MESSAGE_TEXT])
+                            except:
+                                logger.error('Ошибка взаимодействия с базой данных')
+                        logger.info(f'Получено сообщение от пользователя {message[SENDER]}:\n{message[MESSAGE_TEXT]}')
+                        print(f'Получено сообщение от пользователя '
+                              f'{message[SENDER]}:\n{message[MESSAGE_TEXT]}')
+                    else:
+                        logger.error(f'Получено некорректное сообщение с сервера: {message}')
+                print(2)
 
 
 class Sender(threading.Thread, metaclass=ClientVerifier):
 
-    def __init__(self, transport, name):
+    def __init__(self, transport, name, db):
         super().__init__()
         self.daemon = True
         self.transport = transport
         self.name = name
+        self.db = db
 
     def run(self):
         print('Здравствуйте, ' + self.name)
@@ -60,13 +78,74 @@ class Sender(threading.Thread, metaclass=ClientVerifier):
                 self.create_message()
             elif option == 'help':
                 self.print_help()
+            elif option == 'users':
+                with db_lock:
+                    renew_users(self.name, self.transport, self.db)
+                    users = self.db.get_users()
+                pprint(users)
+            elif option == 'contacts':
+                with transport_lock:
+                    send_message(self.transport, {
+                        ACTION: GET_CONTACTS,
+                        TIME: time.time(),
+                        ACCOUNT_NAME: self.name
+                    })
+                    response = get_message(self.transport)
+                    if RESPONSE in response and response[RESPONSE] == 202 and DATA in response and isinstance(response[DATA], list):
+                        contacts = response[DATA]
+                    else:
+                        raise ServerError('Упс. Что-то пошло не так')
+                # with db_lock:
+                #     contacts = self.db.get_contacts()
+                pprint(contacts)
+            elif option.startswith('add '):
+                contact = ' '.join(option.split()[1:])
+                with db_lock:
+                    contact_exist = contact in self.db.get_contacts()
+                    user_exist = contact in self.db.get_users()
+                if not user_exist:
+                    print('Пользователь не найден. Чтобы обновить и просмотреть список доступных пользователей, введите команду "users"')
+                    if contact_exist:
+                        print('Этот пользователь уже находится в вашем списке контактов')
+                    else:
+                        with transport_lock:
+                            send_message(self.transport, {ACTION: ADD_CONTACT,
+                                          ACCOUNT_NAME: self.name,
+                                          TIME: time.time(),
+                                          CONTACT: contact
+                                          })
+                            response = get_message(self.transport)
+                            if RESPONSE not in response or response[RESPONSE] != 200:
+                                raise ServerError('Упс. Что-то пошло не так')
+                        with db_lock:
+                            self.db.add_contact(contact)
+                        print('Контакт успешно создан')
+            elif option.startswith('delete '):
+                contact = ' '.join(option.split()[1:])
+                with transport_lock:
+                    send_message(self.transport, {ACTION: DEL_CONTACT,
+                                  ACCOUNT_NAME: self.name,
+                                  TIME: time.time(),
+                                  CONTACT: contact
+                                  })
+                    response = get_message(self.transport)
+                    if RESPONSE not in response or response[RESPONSE] != 200:
+                        raise ServerError('Упс. Что-то пошло не так')
+                with db_lock:
+                    self.db.delete_contact(contact)
+                print('Контакт успешно удалён')
+            elif option == 'history':
+                with db_lock:
+                    history = self.db.get_message_history()
+                pprint(history)
             elif option == 'exit':
-                try:
-                    send_message(self.transport, self.create_exit_message())
-                except:
-                    pass
-                print('Завершение соединения.')
-                logger.info('Завершение работы по команде пользователя.')
+                with transport_lock:
+                    try:
+                        send_message(self.transport, self.create_exit_message())
+                    except:
+                        pass
+                    print('Завершение соединения.')
+                    logger.info('Завершение работы по команде пользователя.')
                 time.sleep(0.5)
                 break
             else:
@@ -80,28 +159,36 @@ class Sender(threading.Thread, metaclass=ClientVerifier):
         }
 
     def create_message(self):
-        to = input('Введите получателя сообщения: ')
+        receiver = input('Введите получателя сообщения: ')
         message = input('Введите сообщение для отправки: ')
         message_dict = {
             ACTION: MESSAGE,
             SENDER: self.name,
-            RECEIVER: to,
+            RECEIVER: receiver,
             TIME: time.time(),
             MESSAGE_TEXT: message
         }
         logger.debug(f'Сформирован словарь сообщения: {message_dict}')
-        try:
-            send_message(self.transport, message_dict)
-            logger.info(f'Отправлено сообщение для пользователя {to}')
-        except:
-            logger.critical('Потеряно соединение с сервером.')
-            exit(1)
+        with db_lock:
+            self.db.save_message(self.name, receiver, message)
+        with transport_lock:
+            try:
+                send_message(self.transport, message_dict)
+                logger.info(f'Отправлено сообщение для пользователя {receiver}')
+            except:
+                logger.critical('Потеряно соединение с сервером.')
+                exit(1)
 
     @staticmethod
     def print_help():
         print('Поддерживаемые команды:')
         print('message - отправить сообщение. Кому и текст будет запрошены отдельно.')
         print('help - вывести подсказки по командам')
+        print('contacts - вывести список контактов')
+        print('users - обновить и вывести список доступных пользователей')
+        print('add [username] - добавить [username] в контакты')
+        print('delete [username] - удалить [username] из контактов')
+        print('history - вывести историю сообщений')
         print('exit - выход из программы')
 
 
@@ -121,6 +208,24 @@ def message_from_server(sock, my_username):
         except (OSError, ConnectionError, ConnectionAbortedError, ConnectionResetError, json.JSONDecodeError):
             logger.critical(f'Потеряно соединение с сервером.')
             break
+
+
+@log
+def renew_users(name, transport, db):
+    with transport_lock:
+        send_message(transport, {
+            ACTION: GET_USERS,
+            TIME: time.time(),
+            ACCOUNT_NAME: name
+        })
+        response = get_message(transport)
+        logger.info(f'Получено сообщение от сервера {response}')
+        if RESPONSE in response and response[RESPONSE] == 202 and DATA in response and isinstance(response[DATA],
+                                                                                                  list):
+            with db_lock:
+                db.renew_users(response[DATA])
+        else:
+            raise ServerError('Не удалось обновить список доступных пользователей')
 
 
 @log
@@ -181,6 +286,7 @@ def main():
     try:
         transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         transport.connect((server_address, server_port))
+        transport.settimeout(1)
         send_message(transport, create_presence(client_name))
         answer = process_response_ans(get_message(transport))
         logger.info(f'Установлено соединение с сервером. Ответ сервера: {answer}')
@@ -200,9 +306,11 @@ def main():
             f'конечный компьютер отверг запрос на подключение.')
         exit(1)
     else:
-        receiver = Receiver(transport, client_name)
+        db = ClientDB(client_name)
+        renew_users(client_name, transport, db)
+        receiver = Receiver(transport, client_name, db)
         receiver.start()
-        sender = Sender(transport, client_name)
+        sender = Sender(transport, client_name, db)
         sender.start()
         logger.debug('Запущены процессы')
 
@@ -211,6 +319,8 @@ def main():
             if receiver.is_alive() and sender.is_alive():
                 continue
             break
+
+        input()
 
 
 if __name__ == '__main__':
