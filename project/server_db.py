@@ -141,8 +141,8 @@ class ServerDB:
                                                                .filter_by(name=name).first().id).all()
 
     def get_contacts(self, name):
-        return self.session.query(self.Contact).filter_by(user=self.session.query(self.User)
-                                                          .filter_by(name=name).first().id).all()
+        return [contact[1] for contact in self.session.query(self.Contact, self.User.name).filter_by(user=self.session.query(self.User)
+                                                          .filter_by(name=name).first().id).join(self.User, self.Contact.contact == self.User.id).all()]
 
     def get_message_history(self, name=None):
         if not name:

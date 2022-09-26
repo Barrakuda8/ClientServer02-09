@@ -75,8 +75,9 @@ class ClientDB:
         return self.session.query(self.MessageHistory).all()
 
     def add_contact(self, contact):
-        self.session.add(self.Contact(contact))
-        self.session.commit()
+        if not self.session.query(self.Contact).filter_by(name=contact).count():
+            self.session.add(self.Contact(contact))
+            self.session.commit()
 
     def delete_contact(self, name):
         self.session.query(self.Contact).filter_by(name=name).delete()

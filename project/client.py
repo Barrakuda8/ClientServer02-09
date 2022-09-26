@@ -34,12 +34,15 @@ class Receiver(threading.Thread, metaclass=ClientVerifier):
         while True:
             time.sleep(1)
             with transport_lock:
-                print(1)
                 try:
                     message = get_message(self.transport)
                 except IncorrectDataRecivedError:
                     logger.error(f'Не удалось декодировать полученное сообщение')
-                except (OSError, ConnectionError, ConnectionAbortedError,
+                except OSError as err:
+                    if err.errno:
+                        logger.critical(f'Потеряно соединение с сервером.')
+                        break
+                except (ConnectionError, ConnectionAbortedError,
                         ConnectionResetError, json.JSONDecodeError):
                     logger.critical(f'Потеряно соединение с сервером')
                     break
@@ -57,7 +60,6 @@ class Receiver(threading.Thread, metaclass=ClientVerifier):
                               f'{message[SENDER]}:\n{message[MESSAGE_TEXT]}')
                     else:
                         logger.error(f'Получено некорректное сообщение с сервера: {message}')
-                print(2)
 
 
 class Sender(threading.Thread, metaclass=ClientVerifier):
@@ -80,23 +82,11 @@ class Sender(threading.Thread, metaclass=ClientVerifier):
                 self.print_help()
             elif option == 'users':
                 with db_lock:
-                    renew_users(self.name, self.transport, self.db)
                     users = self.db.get_users()
                 pprint(users)
             elif option == 'contacts':
-                with transport_lock:
-                    send_message(self.transport, {
-                        ACTION: GET_CONTACTS,
-                        TIME: time.time(),
-                        ACCOUNT_NAME: self.name
-                    })
-                    response = get_message(self.transport)
-                    if RESPONSE in response and response[RESPONSE] == 202 and DATA in response and isinstance(response[DATA], list):
-                        contacts = response[DATA]
-                    else:
-                        raise ServerError('Упс. Что-то пошло не так')
-                # with db_lock:
-                #     contacts = self.db.get_contacts()
+                with db_lock:
+                    contacts = self.db.get_contacts()
                 pprint(contacts)
             elif option.startswith('add '):
                 contact = ' '.join(option.split()[1:])
@@ -105,10 +95,11 @@ class Sender(threading.Thread, metaclass=ClientVerifier):
                     user_exist = contact in self.db.get_users()
                 if not user_exist:
                     print('Пользователь не найден. Чтобы обновить и просмотреть список доступных пользователей, введите команду "users"')
-                    if contact_exist:
-                        print('Этот пользователь уже находится в вашем списке контактов')
-                    else:
-                        with transport_lock:
+                elif contact_exist:
+                    print('Этот пользователь уже находится в вашем списке контактов')
+                else:
+                    with transport_lock:
+                        try:
                             send_message(self.transport, {ACTION: ADD_CONTACT,
                                           ACCOUNT_NAME: self.name,
                                           TIME: time.time(),
@@ -117,9 +108,11 @@ class Sender(threading.Thread, metaclass=ClientVerifier):
                             response = get_message(self.transport)
                             if RESPONSE not in response or response[RESPONSE] != 200:
                                 raise ServerError('Упс. Что-то пошло не так')
-                        with db_lock:
-                            self.db.add_contact(contact)
-                        print('Контакт успешно создан')
+                        except ServerError as e:
+                            logger.error(e)
+                    with db_lock:
+                        self.db.add_contact(contact)
+                    print('Контакт успешно создан')
             elif option.startswith('delete '):
                 contact = ' '.join(option.split()[1:])
                 with transport_lock:
@@ -212,7 +205,7 @@ def message_from_server(sock, my_username):
 
 @log
 def renew_users(name, transport, db):
-    with transport_lock:
+    try:
         send_message(transport, {
             ACTION: GET_USERS,
             TIME: time.time(),
@@ -226,6 +219,24 @@ def renew_users(name, transport, db):
                 db.renew_users(response[DATA])
         else:
             raise ServerError('Не удалось обновить список доступных пользователей')
+    except ServerError as e:
+        logger.error(e)
+    try:
+        send_message(transport, {
+            ACTION: GET_CONTACTS,
+            TIME: time.time(),
+            ACCOUNT_NAME: name
+        })
+        response = get_message(transport)
+        if RESPONSE in response and response[RESPONSE] == 202 and DATA in response and isinstance(response[DATA], list):
+            contacts = response[DATA]
+            with db_lock:
+                for contact in contacts:
+                    db.add_contact(contact)
+        else:
+            raise ServerError('Упс. Что-то пошло не так')
+    except ServerError as e:
+        logger.error(e)
 
 
 @log
