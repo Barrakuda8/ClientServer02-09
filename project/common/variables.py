@@ -32,9 +32,18 @@ EXIT = 'exit'
 # Словари - ответы:
 # 200
 RESPONSE_200 = {RESPONSE: 200}
+RESPONSE_202 = {RESPONSE: 202}
 # 400
 RESPONSE_400 = {
             RESPONSE: 400,
             ERROR: None
         }
+
+ADD_CONTACT = 'add_contact'
+DEL_CONTACT = 'del_contact'
+GET_CONTACTS = 'get_contacts'
+GET_USERS = 'get_users'
+CONTACT = 'contact'
+DATA = 'data'
+
 
