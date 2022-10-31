@@ -1,6 +1,7 @@
 from sqlalchemy import *
 from sqlalchemy.orm import mapper, sessionmaker
 import datetime
+import os
 
 
 class ClientDB:
@@ -34,7 +35,8 @@ class ClientDB:
 
     def __init__(self, client_name):
         self.client_name = client_name
-        self.engine = create_engine(f'sqlite:///client_base_{self.client_name}.db3', echo=False, pool_recycle=7200,
+        path = os.path.join(os.path.dirname(os.path.realpath(__file__)), f'client_base_{self.client_name}.db3')
+        self.engine = create_engine(f'sqlite:///{path}', echo=False, pool_recycle=7200,
                                     connect_args={'check_same_thread': False})
         self.metadata = MetaData()
 
@@ -63,6 +65,7 @@ class ClientDB:
         mapper(self.MessageHistory, message_history_table)
 
         self.session = sessionmaker(bind=self.engine)()
+        self.session.query(self.Contact).delete()
         self.session.commit()
 
     def get_users(self):
@@ -71,16 +74,18 @@ class ClientDB:
     def get_contacts(self):
         return [contact[0] for contact in self.session.query(self.Contact.name).all()]
 
-    def get_message_history(self):
-        return self.session.query(self.MessageHistory).all()
+    def get_message_history(self, contact):
+        history = self.session.query(self.MessageHistory).filter(or_(self.MessageHistory.sender == contact, self.MessageHistory.receiver == contact))
+        return [(message.sender, message.receiver, message.message, message.time)
+                for message in history]
 
     def add_contact(self, contact):
         if not self.session.query(self.Contact).filter_by(name=contact).count():
             self.session.add(self.Contact(contact))
             self.session.commit()
 
-    def delete_contact(self, name):
-        self.session.query(self.Contact).filter_by(name=name).delete()
+    def delete_contact(self, contact):
+        self.session.query(self.Contact).filter_by(name=contact).delete()
         self.session.commit()
 
     def save_message(self, sender, receiver, message):
