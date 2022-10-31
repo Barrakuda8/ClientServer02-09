@@ -1,25 +1,16 @@
 import configparser
 import os.path
 import socket
-import sys
 import argparse
-import json
-import logging
 import select
-import time
-import logs.config_server_log
-from errors import IncorrectDataRecivedError
-from common.variables import *
 from common.utils import *
-from decos import log
-from metaclasses import ServerVerifier
+from common.decos import log
+from common.metaclasses import ServerVerifier
 import threading
-from pprint import pprint
 from server_db import ServerDB
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import QTimer
 from server_gui import MainWindow, create_active_users_model, create_message_history_model, MessageHistoryWindow, ConfigWindow
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
 
 logger = logging.getLogger('server_dist')
 
@@ -76,9 +67,15 @@ class Server(threading.Thread, metaclass=ServerVerifier):
                 client.close()
             return
         elif ACTION in message and message[ACTION] == MESSAGE and RECEIVER in message and TIME in message \
-                and SENDER in message and MESSAGE_TEXT in message:
-            self.messages.append(message)
-            self.db.process_message(message[SENDER], message[RECEIVER])
+                and SENDER in message and MESSAGE_TEXT in message and self.names[message[SENDER]] == client:
+            if message[RECEIVER] in self.names:
+                self.messages.append(message)
+                self.db.process_message(message[SENDER], message[RECEIVER])
+                send_message(client, RESPONSE_200)
+            else:
+                response = RESPONSE_400
+                response[ERROR] = 'Пользователь не зарегистрирован на сервере.'
+                send_message(client, response)
             return
         elif ACTION in message and message[ACTION] == EXIT and ACCOUNT_NAME in message \
                 and self.names[message[ACCOUNT_NAME]] == client:
@@ -124,6 +121,7 @@ class Server(threading.Thread, metaclass=ServerVerifier):
                 f'Пользователь {message[RECEIVER]} не зарегистрирован на сервере, отправка сообщения невозможна.')
 
     def run(self):
+        global new_connection
         logger.info(
             f'Запущен сервер, порт для подключений: {self.port} , '
             f'адрес с которого принимаются подключения: {self.address}. '
@@ -133,7 +131,7 @@ class Server(threading.Thread, metaclass=ServerVerifier):
         transport.bind((self.address, self.port))
         transport.settimeout(0.5)
 
-        transport.listen(MAX_CONNECTIONS)
+        transport.listen()
         while True:
             try:
                 client, client_address = transport.accept()
@@ -146,19 +144,27 @@ class Server(threading.Thread, metaclass=ServerVerifier):
             try:
                 if self.clients:
                     self.senders, self.receivers, self.errors = select.select(self.clients, self.clients, [], 0)
-            except OSError:
+            except OSError as e:
                 self.senders = []
                 self.receivers = []
                 self.errors = []
+                logger.error(f'Ошибка работы с сокетами: {e}')
 
             if self.senders:
                 for client_with_message in self.senders:
                     try:
                         self.process_client_message(get_message(client_with_message), client_with_message)
-                    except Exception as e:
+                    except OSError as e:
                         print(e)
                         logger.info(f'Клиент {client_with_message.getpeername()} отключился от сервера.')
+                        for name in self.names:
+                            if self.names[name] == client_with_message:
+                                self.db.user_logout(name)
+                                del self.names[name]
+                                break
                         self.clients.remove(client_with_message)
+                        with conflag_lock:
+                            new_connection = True
 
             for message in self.messages:
                 try:
@@ -169,6 +175,8 @@ class Server(threading.Thread, metaclass=ServerVerifier):
                     self.clients.remove(self.names[message[RECEIVER]])
                     self.db.user_logout(message[RECEIVER])
                     del self.names[message[RECEIVER]]
+                    with conflag_lock:
+                        new_connection = True
             self.messages.clear()
 
 
