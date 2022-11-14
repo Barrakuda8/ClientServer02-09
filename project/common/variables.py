@@ -20,6 +20,7 @@ USER = 'user'
 ACCOUNT_NAME = 'account_name'
 SENDER = 'from'
 RECEIVER = 'to'
+PUBLIC_KEY = 'pubkey'
 
 # Прочие ключи, используемые в протоколе
 PRESENCE = 'presence'
@@ -28,16 +29,23 @@ ERROR = 'error'
 MESSAGE = 'message'
 MESSAGE_TEXT = 'mess_text'
 EXIT = 'exit'
+BIN = 'bin'
 
 # Словари - ответы:
-# 200
 RESPONSE_200 = {RESPONSE: 200}
 RESPONSE_202 = {RESPONSE: 202}
-# 400
 RESPONSE_400 = {
             RESPONSE: 400,
             ERROR: None
         }
+RESPONSE_205 = {
+    RESPONSE: 205
+}
+
+RESPONSE_511 = {
+    RESPONSE: 511,
+    BIN: None
+}
 
 ADD_CONTACT = 'add_contact'
 DEL_CONTACT = 'del_contact'
@@ -45,5 +53,6 @@ GET_CONTACTS = 'get_contacts'
 GET_USERS = 'get_users'
 CONTACT = 'contact'
 DATA = 'data'
+GET_PUBLIC_KEY = 'pubkey_need'
 
 

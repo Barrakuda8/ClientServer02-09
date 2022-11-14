@@ -8,6 +8,9 @@ logger = logging.getLogger('client_dist')
 
 
 class DeleteContactDialog(QDialog):
+    """
+    Класс графического интерфейса окна удаления одного пользователя из списка контактов другого пользователя
+    """
     def __init__(self, db):
         super().__init__()
         self.db = db
