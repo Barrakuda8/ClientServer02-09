@@ -11,9 +11,6 @@ server/common/decos.py
 server/common/errors.py
 server/common/utils.py
 server/common/variables.py
-server/doc/__init__.py
-server/doc/source/__init__.py
-server/doc/source/conf.py
 server/logs/__init__.py
 server/logs/config_server_log.py
 server/server_files/__init__.py

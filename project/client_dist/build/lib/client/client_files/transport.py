@@ -6,10 +6,9 @@ from PyQt5.QtCore import pyqtSignal, QObject
 import hashlib
 import binascii
 import hmac
-sys.path.append('../../../')
-from server_dist.server.common.utils import *
-from server_dist.server.common.variables import *
-from server_dist.server.common.errors import ServerError
+from common.utils import *
+from common.variables import *
+from common.errors import ServerError
 
 
 logger = logging.getLogger('client_dist')

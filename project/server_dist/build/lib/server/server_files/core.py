@@ -6,9 +6,10 @@ import hmac
 import binascii
 import os
 import sys
-sys.path.append('../../../')
-from server_dist.server.common import send_message, get_message
-from server_dist.server.common.decos import login_required
+import logging
+from common.utils import send_message, get_message
+from common.decos import login_required
+from common.variables import *
 
 logger = logging.getLogger('server_dist')
 

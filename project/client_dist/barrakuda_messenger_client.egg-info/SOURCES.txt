@@ -21,4 +21,3 @@ client/common/utils.py
 client/common/variables.py
 client/logs/__init__.py
 client/logs/config_client_log.py
-client/logs/config_server_log.py

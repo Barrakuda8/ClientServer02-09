@@ -6,12 +6,11 @@ import json
 from Cryptodome.Cipher import PKCS1_OAEP
 from Cryptodome.PublicKey import RSA
 import base64
-sys.path.append('../../../')
-from client_dist.client.client_files.main_window_ui import MainClientWindowUI
-from client_dist.client.client_files.add_contact_dialog import AddContactDialog
-from client_dist.client.client_files.delete_contact_dialog import DeleteContactDialog
-from server_dist.server.common.errors import ServerError
-from server_dist.server.common.variables import *
+from client_files.main_window_ui import MainClientWindowUI
+from client_files.add_contact_dialog import AddContactDialog
+from client_files.delete_contact_dialog import DeleteContactDialog
+from common.errors import ServerError
+from common.variables import *
 
 logger = logging.getLogger('client_dist')
 
