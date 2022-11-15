@@ -22,31 +22,3 @@ def log(func_to_log):
         ret = func_to_log(*args, **kwargs)
         return ret
     return log_saver
-
-
-def login_required(func):
-    """
-    :param func: функция для декорирования
-    Функция-декоратор, проверяющая залогинен ли клиент на сервере
-    """
-
-    def checker(*args, **kwargs):
-        from server_dist.server.server_files import MessageProcessor
-        from server_dist.server.common import ACTION, PRESENCE
-        if isinstance(args[0], MessageProcessor):
-            found = False
-            for arg in args:
-                if isinstance(arg, socket.socket):
-                    for client in args[0].names:
-                        if args[0].names[client] == arg:
-                            found = True
-
-            for arg in args:
-                if isinstance(arg, dict):
-                    if ACTION in arg and arg[ACTION] == PRESENCE:
-                        found = True
-            if not found:
-                raise TypeError
-        return func(*args, **kwargs)
-
-    return checker

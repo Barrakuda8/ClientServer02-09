@@ -1,13 +1,14 @@
 import argparse
 import os
+import logging
 from Cryptodome.PublicKey import RSA
 from PyQt5.QtWidgets import QApplication, QMessageBox
-from client_dist.client.client_files.main_window import ClientMainWindow
-from client_dist.client.client_files.start_dialog import UserNameDialog
-from client_dist.client.client_files.transport import ClientTransport
-from server_dist.server.common import ServerError
-from server_dist.server.common.decos import log
-from client_dist.client.client_files import ClientDB
+from client_files.main_window import ClientMainWindow
+from client_files.start_dialog import UserNameDialog
+from client_files.transport import ClientTransport
+from common.errors import ServerError
+from common.decos import log
+from client_files.client_db import ClientDB
 
 logger = logging.getLogger('client_dist')
 

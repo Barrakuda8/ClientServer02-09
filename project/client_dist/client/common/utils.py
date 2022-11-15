@@ -1,7 +1,7 @@
 import json
 import sys
-sys.path.append('../')
-from server_dist.server.common.decos import log
+from common.decos import log
+from common.variables import MAX_PACKAGE_LENGTH, ENCODING
 
 
 @log

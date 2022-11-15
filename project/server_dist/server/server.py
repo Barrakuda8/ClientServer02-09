@@ -3,11 +3,11 @@ import os.path
 import argparse
 from common.utils import *
 from common.decos import log
-from server_dist.server.server_files import ServerDB
+from server_files.server_db import ServerDB
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
-from server_dist.server.server_files.main_window import MainWindow
-from server_dist.server.server_files import MessageProcessor
+from server_files.main_window import MainWindow
+from server_files.core import MessageProcessor
 import logging
 
 logger = logging.getLogger('server_dist')

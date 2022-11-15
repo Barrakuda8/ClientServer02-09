@@ -1,8 +1,7 @@
-from server_dist.server.common.variables import *
+from common.variables import *
 import json
 import sys
-sys.path.append('../../../')
-from server_dist.server.common.decos import log
+from common.decos import log
 
 
 @log

@@ -31,8 +31,8 @@ def login_required(func):
     """
 
     def checker(*args, **kwargs):
-        from server_dist.server.server_files import MessageProcessor
-        from server_dist.server.common.variables import ACTION, PRESENCE
+        from server_files.core import MessageProcessor
+        from common.variables import ACTION, PRESENCE
         if isinstance(args[0], MessageProcessor):
             found = False
             for arg in args:
