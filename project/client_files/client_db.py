@@ -5,6 +5,9 @@ import os
 
 
 class ClientDB:
+    """
+    Класс, определяющий, создающий и изменяющий клиентскую базу данных
+    """
 
     class User:
         def __init__(self, name):
@@ -69,30 +72,72 @@ class ClientDB:
         self.session.commit()
 
     def get_users(self):
+        """
+        Метод, возвращающий список доступных пользователей из базы данных текущего пользователя
+        """
         return [user[0] for user in self.session.query(self.User.name).all()]
 
     def get_contacts(self):
+        """
+        Метод, возвращающий список контактов текущего пользователя из его базы данных
+        """
+
         return [contact[0] for contact in self.session.query(self.Contact.name).all()]
 
     def get_message_history(self, contact):
+        """
+        :param contact: имя пользователя, историю сообщений с которым нужно получить
+
+        Метод, возвращающий историю сообщений текущего пользователя с другим пользователем
+        """
         history = self.session.query(self.MessageHistory).filter(or_(self.MessageHistory.sender == contact, self.MessageHistory.receiver == contact))
         return [(message.sender, message.receiver, message.message, message.time)
-                for message in history]
+                for message in history.all()]
+
+    def clear_contacts(self):
+        """
+        Метод, очищающий таблицу контактов текущего пользователя
+        """
+
+        self.session.query(self.Contact).delete()
+        self.session.commit()
 
     def add_contact(self, contact):
+        """
+        :param contact: имя пользователя, которого нужно добавить в таблицу контактов текущего пользователя
+
+        Метод, добавляющий в таблицу контактов нового пользователя
+        """
         if not self.session.query(self.Contact).filter_by(name=contact).count():
             self.session.add(self.Contact(contact))
             self.session.commit()
 
     def delete_contact(self, contact):
+        """
+        :param contact: имя пользователя, которого нужно удалить из таблицы контактов текущего пользователя
+
+        Метод, удаляющий из таблицы контактов данного пользователя
+        """
         self.session.query(self.Contact).filter_by(name=contact).delete()
         self.session.commit()
 
     def save_message(self, sender, receiver, message):
+        """
+        :param sender: отправитель сообщения
+        :param receiver: получатель сообщения
+        :param message: текст сообщения
+
+        Метод, сохраняющий сообщение в таблице сообщений текущего пользователя
+        """
         self.session.add(self.MessageHistory(sender, receiver, message))
         self.session.commit()
 
     def renew_users(self, users):
+        """
+        :param users: доступные пользователи, которыми нужно заполнить таблицу
+
+        Метод, обновляющий таблицу доступных пользователей
+        """
         self.session.query(self.User).delete()
         for user in users:
             self.session.add(self.User(user))

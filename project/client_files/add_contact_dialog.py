@@ -7,6 +7,10 @@ logger = logging.getLogger('client_dist')
 
 
 class AddContactDialog(QDialog):
+    """
+    Класс графического интерфейса окна добавления одного пользователя в список контактов текущего пользователя
+    """
+
     def __init__(self, transport, db):
         super().__init__()
         self.transport = transport
@@ -42,6 +46,9 @@ class AddContactDialog(QDialog):
         self.refresh_button.clicked.connect(self.renew_possible_contacts)
 
     def get_possible_contacts(self):
+        """
+        Метод, создающий список пользователей, доступных для добавления в список контактов текущего пользователя
+        """
         self.selector.clear()
         contacts = set(self.db.get_contacts())
         users = set(self.db.get_users())
@@ -49,6 +56,11 @@ class AddContactDialog(QDialog):
         self.selector.addItems(users - contacts)
 
     def renew_possible_contacts(self):
+        """
+        Метод, обеспечивающий обновление информации в списке пользователей, доступных для добавления в список
+        контактов текущего пользователя
+        """
+
         try:
             self.transport.renew_users()
         except OSError:

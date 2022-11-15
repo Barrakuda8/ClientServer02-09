@@ -29,7 +29,7 @@ class Launcher:
 
         self.host_entry.insert(0, DEFAULT_IP_ADDRESS)
         self.port_entry.insert(0, DEFAULT_PORT)
-        self.clients_entry.insert(0, 3)
+        self.clients_entry.insert(0, 2)
 
         self.host_entry.grid(row=0, column=1, padx=5, pady=5)
         self.port_entry.grid(row=1, column=1, padx=5, pady=5)
